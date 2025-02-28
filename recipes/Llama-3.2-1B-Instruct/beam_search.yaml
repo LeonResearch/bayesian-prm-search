@@ -1,0 +1,10 @@
+# refer to src/sal/config.py for more options
+
+filter_duplicates: true
+approach: beam_search
+prm_path: Bayes-PRM # RLHFlow/Llama3.1-8B-PRM-Deepseek-Data
+n: 16
+search_batch_size: 1  # DO NOT CHANGE!
+prm_batch_size: 4
+# num_samples: 10       # REMOVE THIS LINE TO RUN ON THE WHOLE DATASET
+seed: 0 
