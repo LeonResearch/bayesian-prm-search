@@ -70,7 +70,6 @@ def save_dataset(dataset, config):
     else:
         inference_model = config.model_path.split('/')[-1]
         prm_model = config.prm_path.split('/')[-1]
-        __import__("pdb").set_trace()
         num_questions = len(dataset)
         if config.output_dir is None:
             config.output_dir = f"data"

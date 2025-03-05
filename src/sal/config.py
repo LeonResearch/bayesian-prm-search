@@ -31,7 +31,7 @@ class Config:
     )
     prm_path: str = "Bayes-PRM" # "RLHFlow/Llama3.1-8B-PRM-Deepseek-Data"
     # Output Related Options
-    output_dir: str = "data"
+    output_dir: str = "search_results"
     num_proc: int = None
     push_to_hub: bool = False
     hub_dataset_id: str = None
@@ -48,6 +48,9 @@ class Config:
     prm_checkpoint : str = "prm_checkpoints/2025-02-22_16-04-26/"
     prm_precision: torch.dtype = torch.bfloat16
 
+    #PrcoessBench configs
+    processbench_output_dir: str = "processbench_results"
+    evaluation: bool = False 
 
     # Dataset Related Options
     dataset_name: str = "HuggingFaceH4/MATH-500"

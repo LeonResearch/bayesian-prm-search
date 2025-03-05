@@ -160,61 +160,15 @@ class RLHFFlow(PRM):
         self,
         questions: list[str],
         outputs: list[list[str]],
-        batched: bool = True,
         batch_size=4,
     ) -> list[list[float]]:
-        if batched is True:
-            batch_size = (
-                self.config.prm_batch_size 
-                if self.config.prm_batch_size is not None 
-                else batch_size
-            )
-            return self._score_batched(questions, outputs, batch_size=batch_size)
-        else:
-            return self._score_single(questions, outputs)
 
-    def _score_single(self, questions: list[str], outputs: list[list[str]]):
-        # reference code: https://github.com/RLHFlow/RLHF-Reward-Modeling/blob/main/math-rm/prm_evaluate.py
-        all_scores = []
-        for question, answers in zip(questions, outputs, strict=True):
-            all_step_scores = []
-            for ans in answers:
-                single_step_score = []
-                conversation = []
-                ans_list = ans.split("\n\n")
-                for k in range(len(ans_list)):
-                    if k == 0:
-                        # TODO: add the system prompt like we did for math shepard?
-                        text = question + " " + ans_list[0]
-                    else:
-                        text = ans_list[k]
-                    conversation.append({"content": text, "role": "user"})
-                    conversation.append({"content": "+", "role": "assistant"})
-                    input_ids = self.tokenizer.apply_chat_template(
-                        conversation, return_tensors="pt"
-                    ).to(self.model.device)
-                    with torch.no_grad():
-                        logits = self.model(input_ids).logits[
-                            :, -3, self.candidate_tokens
-                        ]  # simple version, the +/- is predicted by the '-3' position
-                        step_scores = logits.softmax(dim=-1)[
-                            :, 0
-                        ]  # 0 means the prob of + (1 mean -)
-                        # print(scores)
-                        single_step_score.append(
-                            step_scores[0]
-                            .detach()
-                            .to("cpu", dtype=torch.float32)
-                            .item()
-                        )
+        batch_size = (
+            self.config.prm_batch_size 
+            if self.config.prm_batch_size is not None 
+            else batch_size
+        )
 
-                all_step_scores.append(single_step_score)
-            all_scores.append(all_step_scores)
-        return all_scores
-
-    def _score_batched(
-        self, questions: list[str], outputs: list[list[str]], batch_size: int = 2
-    ):
         # The RLHFlow models are trained to predict the "+" or "-" tokens in a dialogue, but since these are not unique
         # we need to introduce a dummy special token here for masking.
         special_tok_id = self.tokenizer("ки", return_tensors="pt").input_ids[0, 1]
@@ -278,6 +232,38 @@ class RLHFFlow(PRM):
         # N * 1 * Steps
         return reshaped_output_scores
 
+
+    def get_prediction(self, x):
+        steps = x['steps']
+        messages = []
+        for sdx, step in enumerate(steps):
+            if sdx == 0:
+                messages.append({'role': 'user', 'content': x['problem'] + '\n\n' + step})
+            else:
+                messages.append({'role': 'user', 'content': step})
+            messages.append({'role': 'assistant', 'content': '+'})
+
+            input = self.tokenizer.apply_chat_template(
+                messages, padding=True, return_tensors="pt"
+            ).to(self.model.device)
+            # Track the "+" position 
+            sign_posistion = input == self.candidate_tokens[0]
+            with torch.no_grad():
+                logit = self.model(input).logits[:,:,self.candidate_tokens]
+                # the last True in sign_position is the "+" we inserted,
+                # while the other "+" are add operations in the solution
+                pred = logit[sign_posistion][-1].argmax(dim=-1).cpu().item()
+                # 0 is "+", 1 is "-"
+                judgement = pred == 0
+            if not judgement:
+                x["prediction"] = sdx
+                x["match"] = sdx == x["label"]
+                return x
+            else:
+                pass
+        x["prediction"] = -1
+        x["match"] = -1 == x["label"]
+        return x
 
 class BayesPRM(PRM):
     def load_model_and_tokenizer(self):
@@ -415,6 +401,45 @@ class BayesPRM(PRM):
 
         return reshaped_output_scores    
 
+
+    def get_prediction(self, x):
+        steps = x['steps']
+        messages = []
+        for sdx, step in enumerate(steps):
+            if sdx == 0:
+                messages.append({"content": x['problem'], "role": "user"})
+                messages.append({"content": step, "role": "assistant"})
+            else:
+                messages.append({"content": step, "role": "assistant"})
+
+            input = self.tokenizer.apply_chat_template(
+                messages, padding=True, return_tensors="pt"
+            ).to(self.model.device)
+
+            input = self.tokenizer.apply_chat_template(
+                messages, 
+                padding=True, 
+                return_tensors="pt",
+                add_generation_prompt=False,
+                continue_final_message=True,
+            ).to(self.model.device)
+            with torch.no_grad():
+                logit = self.model(input)
+                
+                #score = self.model.mean(logit).float().item()
+                #judgement = score >= 0.5
+                
+                judgement = logit.argmax(dim=-1).item() >= 500
+            
+            if not judgement:
+                x["prediction"] = sdx
+                x["match"] = sdx == x["label"]
+                return x
+            else:
+                pass
+        x["prediction"] = -1
+        x["match"] = -1 == x["label"]
+        return x
 
 
 def load_prm(config: Config) -> PRM:

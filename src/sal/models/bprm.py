@@ -51,13 +51,15 @@ class BayesianPRM(nn.Module):
 
     def mean(self, logits) -> torch.Tensor:
         pmf = logits.softmax(dim=-1)
-        x = torch.arange(logits.shape[-1])
+        x = torch.arange(logits.shape[-1]) / logits.shape[-1] 
+        x = x.to(logits)
         return pmf @ x
 
 
     def variance(self, logits) -> torch.Tensor:
         pmf = logits.softmax(dim=-1)
-        x = torch.arange(logits.shape[-1])
+        x = torch.arange(logits.shape[-1]).to(logits)
+        x = x.to(logits)
         x_square = x**2
         mean = pmf @ x
         return pmf @ x_square - mean**2
@@ -66,7 +68,7 @@ class BayesianPRM(nn.Module):
     def ucb(self, logits, beta=1) -> torch.Tensor:
         pmf = logits.softmax(dim=-1)
         x = torch.arange(logits.shape[-1]) / logits.shape[-1] 
-        x = x.to(logits.dtype)
+        x = x.to(logits)
         x_square = x**2
         mean = pmf @ x
         var = pmf @ x_square - mean**2
