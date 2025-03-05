@@ -161,4 +161,7 @@ cython_debug/
 #.idea/
 
 # outputs
-data
+data/
+processbench_result/
+prm_checkpoints/
+search_results/
